@@ -7,7 +7,7 @@ import { Subscriptions } from '../subscriptions';
 import { BlockAndLogStreamerListenerInterface } from './db/BlockAndLogStreamerListener';
 import { DB } from './db/DB';
 import { Markets } from './getter/Markets';
-import { WarpController } from '../warp/warp-controller';
+import { WarpController } from '../warp/WarpController';
 
 const settings = require('./settings.json');
 
