@@ -27,30 +27,6 @@ export class WarpController {
     // TODO: Dont do this all in memory (fetch chunks)
     this.ipfs = await IPFS.create();
 
-    // TODO: Sort this by using pouch unless
-    const allDocs = await this.db.getSyncableDatabase(this.db.getDatabaseName("MarketCreated")).allDocs();
-    const logs = _.sortBy(_.map(allDocs.rows, (doc) => doc.doc as MarketCreatedLog), ["blockNumber", "logIndex"])
-
-    console.log(logs.length);
-
-    var block = [];
-    for (const log of logs) {
-      block.push(JSON.stringify(log));
-    }
-    const files = await this.addBlock(block);
-    console.log(files);
-
-    const o = await this.ipfs.object.get(files[0].hash);
-    console.log(o);
-
-    var unmarshaled = Unixfs.unmarshal(o.Data);
-    console.log(unmarshaled);
-
-    const d = await this.ipfs.object.get(o.Links[0].Hash);
-    unmarshaled = Unixfs.unmarshal(d.Data);
-    console.log(unmarshaled);
-    console.log(unmarshaled.data.toString())
-
 
 
     console.log("PART DUEX");
