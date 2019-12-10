@@ -25,20 +25,17 @@ export class WarpController {
 
 
   public async createAllCheckpoints() {
-    for(const table of this.db.dexieDB.tables) {
-      const results = await this.ipfsAddRows(await table.toArray());
-      console.log(results);
-    }
+    const results = await this.ipfsAddRows('/events/MarketCreated', 'market', await this.db.MarketCreated.toArray());
+    console.log(results);
   }
 
   private async ipfsAddChunk(data: Buffer) {
 
   }
 
-  private async ipfsAddRows(rows: Array<any>) {
-    console.log(rows);
-    const results = this.ipfs.add(rows.map((row) => ({
-      path: `logs/${row.blockNumber}/${row.logIndex}`,
+  private async ipfsAddRows(path: string, id: string, rows: Array<any>) {
+    const results = this.ipfs.add(rows.map((row, i) => ({
+      path: `/augur/${path}/${row[id]}`,
       content: Buffer.from(JSON.stringify(row))
     })));
 
