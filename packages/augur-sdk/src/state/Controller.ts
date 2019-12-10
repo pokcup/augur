@@ -33,7 +33,7 @@ export class Controller {
       const db = await this.db;
       await db.sync(this.augur, settings.chunkSize, settings.blockstreamDelay);
 
-      const warp = new WarpController(db);
+      const warp = await WarpController.create(db);
       warp.createAllCheckpoints();
 
       this.blockAndLogStreamerListener.listenForBlockRemoved(

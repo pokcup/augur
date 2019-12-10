@@ -143,4 +143,10 @@ export class SyncableDB extends RollbackTable {
   getFullEventName(): string {
     return this.eventName;
   }
+
+  async* allRows() {
+    for (const r of await this.table.toArray()) {
+      yield r;
+    }
+   }
 }

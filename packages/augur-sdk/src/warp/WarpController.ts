@@ -9,25 +9,44 @@ import {
 } from '../state/logs/types';
 
 export class WarpController {
-  private ipfs: IPFS;
   private static DEFAULT_NODE_TYPE = { format: 'dag-pb', hashAlg: 'sha2-256' };
   get ready() {
     return this.ipfs.ready;
   }
 
-  constructor(private db: DB) {
+
+  static async create(db: DB) {
+    const ipfs = await IPFS.create();
+    return new WarpController(db, ipfs);
+  }
+
+  constructor(private db: DB, private ipfs: IPFS) {
   }
 
 
   public async createAllCheckpoints() {
-    // Goal will be to make some structure that is easy to query
-    // but still matches the file interface is possible so that its
-    // fetchable directly from an IPFS gateway
-    //
-    // TODO: Dont do this all in memory (fetch chunks)
-    this.ipfs = await IPFS.create();
+    for(const table of this.db.dexieDB.tables) {
+      const results = await this.ipfsAddRows(await table.toArray());
+      console.log(results);
+    }
+  }
 
+  private async ipfsAddChunk(data: Buffer) {
 
+  }
+
+  private async ipfsAddRows(rows: Array<any>) {
+    console.log(rows);
+    const results = this.ipfs.add(rows.map((row) => ({
+      path: `logs/${row.blockNumber}/${row.logIndex}`,
+      content: Buffer.from(JSON.stringify(row))
+    })));
+
+    console.log(results);
+    return results;
+  }
+
+  public async doStuffWithIpfs() {
 
     console.log("PART DUEX");
 
@@ -55,6 +74,7 @@ export class WarpController {
 
     const r = await this.ipfs.dag.put(omnibus, WarpController.DEFAULT_NODE_TYPE);
     console.log(r.toString());
+
   }
 
 
