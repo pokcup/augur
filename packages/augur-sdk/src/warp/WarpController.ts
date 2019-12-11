@@ -1,12 +1,13 @@
-import * as _ from 'lodash';
+import Dexie from 'dexie';
 import * as IPFS from 'ipfs';
-import { DAGNode } from 'ipld-dag-pb';
 import * as Unixfs from 'ipfs-unixfs';
+import { DAGNode } from 'ipld-dag-pb';
+import { Stream } from 'stream';
 
 import { DB } from '../state/db/DB';
-import {
-  MarketCreatedLog
-} from '../state/logs/types';
+import { SyncableInterface } from '../state/types';
+
+export const WARPSYNC_VERSION = '1';
 
 export class WarpController {
   private static DEFAULT_NODE_TYPE = { format: 'dag-pb', hashAlg: 'sha2-256' };
@@ -20,72 +21,130 @@ export class WarpController {
     return new WarpController(db, ipfs);
   }
 
-  constructor(private db: DB, private ipfs: IPFS) {
+  constructor(private db: SyncableInterface, private ipfs: IPFS) {
   }
 
+  async createAllCheckpoints() {
+    const topLevelDirectory = new DAGNode(Unixfs.default('directory').marshal());
+    const versionFile = await this.ipfs.add({
+      content: Buffer.from(WARPSYNC_VERSION),
+    });
+    topLevelDirectory.addLink({
+      Name: 'VERSION',
+      Hash: versionFile[0].hash,
+      Size: 1,
+    });
 
-  public async createAllCheckpoints() {
-    const results = await this.ipfsAddRows('/events/MarketCreated', 'market', await this.db.MarketCreated.toArray());
-    console.log(results);
-  }
+    topLevelDirectory.addLink(await this.buildDirectory('accounts'));
+    topLevelDirectory.addLink(await this.buildDirectory('checkpoints'));
 
-  private async ipfsAddChunk(data: Buffer) {
+    let indexFileLinks = [];
 
-  }
-
-  private async ipfsAddRows(path: string, id: string, rows: Array<any>) {
-    const results = this.ipfs.add(rows.map((row, i) => ({
-      path: `/augur/${path}/${row[id]}`,
-      content: Buffer.from(JSON.stringify(row))
-    })));
-
-    console.log(results);
-    return results;
-  }
-
-  public async doStuffWithIpfs() {
-
-    console.log("PART DUEX");
-
-    const part2 = await this.ipfs.add([{
-      path: '/augur-two/paul',
-      content: Buffer.from("Paul is great")
-    }, {
-      path: '/augur-two/justin',
-      content: Buffer.from("And I would also say that justin is also AMAZING!!!!")
-    }]);
+    const tableNode = new DAGNode(Unixfs.default('directory').marshal());
+    for(const table of this.db.databasesToSync()) {
+      console.log(`Syncing ${table.name} ${(await table.toArray()).length}`);
+      const [links, r] = await this.addDBToIPFS(table);
+      indexFileLinks = [
+        ...indexFileLinks,
+        ...links
+      ];
+      tableNode.addLink(r);
+    }
+    topLevelDirectory.addLink({
+      Name: 'tables',
+      Hash: await this.ipfs.dag.put(tableNode, WarpController.DEFAULT_NODE_TYPE),
+      Size: 0,
+    });
 
     const file = Unixfs.default('file');
-    file.addBlockSize(part2[0].size);
-    file.addBlockSize(part2[1].size);
+    for (let i = 0; i < indexFileLinks.length; i++) {
+      file.addBlockSize(indexFileLinks[i].Size);
+    }
 
-    const omnibus = new DAGNode(file.marshal());
-    omnibus.addLink({
-      Hash: part2[0].hash,
-      Size: part2[0].size
+    const indexFile = new DAGNode(file.marshal());
+    for (let i = 0; i < indexFileLinks.length; i++) {
+      indexFile.addLink(indexFileLinks[i]);
+    }
+
+    const indexFileResponse = await this.ipfs.dag.put(indexFile, WarpController.DEFAULT_NODE_TYPE);
+    topLevelDirectory.addLink({
+      Name: 'index',
+      Hash: indexFileResponse,
+      Size: file.fileSize(),
     });
-    omnibus.addLink({
-      Hash: part2[1].hash,
-      Size: part2[1].size
-    });
 
-    const r = await this.ipfs.dag.put(omnibus, WarpController.DEFAULT_NODE_TYPE);
-    console.log(r.toString());
+    const d = await this.ipfs.dag.put(topLevelDirectory, WarpController.DEFAULT_NODE_TYPE);
 
+    console.log(d.toString());
+    return d.toString();
   }
 
+  async addDBToIPFS(table: Dexie.Table<any, any>) {
+    const results = await this.ipfsAddRows(await table.toArray());
 
-  async addBlock(block: string[]) {
-    console.log("Adding block")
-    const blockData = Buffer.from(block.join("\n"));
-    return await this.ipfs.add([{
-      path: '/augur-warp/chunk1',
-      content: blockData
-    }, {
-      path: '/augur-warp/chunk2',
-      content: blockData.slice(0,10005)
-    }], {
-      chunker: 'size-10000'
+    const file = Unixfs.default('file');
+    for (let i = 0; i < results.length; i++) {
+      file.addBlockSize(results[i].size);
+    }
+    const links = [];
+    const indexFile = new DAGNode(file.marshal());
+    for (let i = 0; i < results.length; i++) {
+      const link = {
+        Hash: results[i].hash,
+        Size: results[i].size
+      };
+      links.push(link);
+      indexFile.addLink(link);
+    }
+
+    const indexFileResponse = await this.ipfs.dag.put(indexFile, WarpController.DEFAULT_NODE_TYPE);
+
+    const directory = Unixfs.default('directory');
+    for (let i = 0; i < results.length; i++) {
+      // directory.addBlockSize(results[i].size);
+    }
+
+    // directory.addBlockSize(file.fileSize());
+    const directoryNode = new DAGNode(directory.marshal());
+    for (let i = 0; i < results.length; i++) {
+      directoryNode.addLink({
+        Name: `file${i}`,
+        Hash: results[i].hash,
+        Size: results[i].size
+      });
+    }
+
+    directoryNode.addLink({
+      Name: 'index',
+      Hash: indexFileResponse.toString(),
+      Size: file.fileSize(),
     });
+
+    const q = await this.ipfs.dag.put(directoryNode, WarpController.DEFAULT_NODE_TYPE);
+    return [links, {
+      Name: table.name,
+      Hash: q.toString(),
+      Size: 0,
+    }]
+  }
+
+  private async buildDirectory(name: string) {
+    const directoryNode = new DAGNode(Unixfs.default('directory').marshal());
+    const result = await this.ipfs.dag.put(directoryNode, WarpController.DEFAULT_NODE_TYPE);
+    return {
+      Name: `${name}`,
+      Hash: result,
+      Size: 0,
+    }
+  }
+
+  private async ipfsAddRows(rows: any[]):Promise<{ hash: string, size: string}[]> {
+    return this.ipfs.add(rows.map((row, i) => ({
+      content: Buffer.from(JSON.stringify(row) + '\n')
+    })));
+  }
+
+  getFile(ipfsPath:string) {
+    return this.ipfs.cat(ipfsPath);
   }
 }

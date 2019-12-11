@@ -69,6 +69,7 @@ export class ContractEvents {
         { name: '' },
         logValues,
         {
+          address: log.address,
           blockNumber: log.blockNumber,
           blockHash: log.blockHash,
           transactionIndex: log.transactionIndex,

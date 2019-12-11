@@ -1,15 +1,18 @@
-import { API } from '@augurproject/sdk/build/state/getter/API';
+import { SECONDS_IN_A_DAY } from '@augurproject/sdk';
 import { DB } from '@augurproject/sdk/build/state/db/DB';
 import { Action, Coin } from '@augurproject/sdk/build/state/getter/Accounts';
+import { API } from '@augurproject/sdk/build/state/getter/API';
+import { BulkSyncStrategy } from '@augurproject/sdk/build/state/sync/BulkSyncStrategy';
 import {
-  MarketReportingState,
-} from '@augurproject/sdk/build/constants';
-import { AllOrders } from '@augurproject/sdk/build/state/getter/OnChainTrading';
-import { makeDbMock, makeProvider } from '../../../libs';
-import { ContractAPI, loadSeedFile, ACCOUNTS, defaultSeedPath } from '@augurproject/tools';
-import { stringTo32ByteHex } from '../../../libs/Utils';
+  ACCOUNTS,
+  ContractAPI,
+  defaultSeedPath,
+  loadSeedFile,
+} from '@augurproject/tools';
 import { BigNumber } from 'bignumber.js';
-import { SECONDS_IN_A_DAY } from '@augurproject/sdk';
+import { makeDbMock, makeProvider } from '../../../libs';
+import { TestEthersProvider } from '../../../libs/TestEthersProvider';
+import { stringTo32ByteHex } from '../../../libs/Utils';
 
 const mock = makeDbMock();
 
@@ -18,10 +21,12 @@ describe('State API :: Accounts :: ', () => {
   let api: API;
   let john: ContractAPI;
   let mary: ContractAPI;
+  let provider:TestEthersProvider;
+  let syncStrategy:BulkSyncStrategy;
 
   beforeAll(async () => {
     const seed = await loadSeedFile(defaultSeedPath);
-    const provider = await makeProvider(seed, ACCOUNTS);
+    provider = await makeProvider(seed, ACCOUNTS);
 
     john = await ContractAPI.userWrapper(ACCOUNTS[0], provider, seed.addresses);
     mary = await ContractAPI.userWrapper(ACCOUNTS[1], provider, seed.addresses);
@@ -29,6 +34,14 @@ describe('State API :: Accounts :: ', () => {
     api = new API(john.augur, db);
     await john.approveCentralAuthority();
     await mary.approveCentralAuthority();
+
+    syncStrategy = new BulkSyncStrategy(
+      provider.getLogs,
+      (await db).logFilters.buildFilter,
+      (await db).logFilters.onLogsAdded,
+      john.augur.contractEvents.parseLogs,
+      1,
+    );
   });
 
   test(':getAccountTransactionHistory', async () => {
@@ -40,8 +53,8 @@ describe('State API :: Accounts :: ', () => {
       stringTo32ByteHex('C'),
     ]);
     const johnScalarMarket = await john.createReasonableScalarMarket();
-
-    await (await db).sync(john.augur, mock.constants.chunkSize, 0);
+    let blockNumber = await provider.getBlockNumber();
+    blockNumber = await syncStrategy.start(0, blockNumber);
 
     let accountTransactionHistory = await api.route(
       'getAccountTransactionHistory',
@@ -188,8 +201,8 @@ describe('State API :: Accounts :: ', () => {
       stringTo32ByteHex('42')
     );
 
-    await (await db).sync(john.augur, mock.constants.chunkSize, 0);
-
+    // await (await db).sync(john.augur, mock.constants.chunkSize, 0);
+    blockNumber = await syncStrategy.start(blockNumber, (await provider.getBlockNumber()));
     accountTransactionHistory = await api.route(
       'getAccountTransactionHistory',
       {
@@ -198,6 +211,9 @@ describe('State API :: Accounts :: ', () => {
         action: Action.BUY,
       }
     );
+
+    console.log('accountTransactionHistory', accountTransactionHistory, await (await db).OrderEvent.toArray());
+
     expect(accountTransactionHistory).toMatchObject([
       {
         action: 'BUY',
@@ -360,7 +376,7 @@ describe('State API :: Accounts :: ', () => {
       cost
     );
 
-    await (await db).sync(john.augur, mock.constants.chunkSize, 0);
+    blockNumber = await syncStrategy.start(blockNumber, (await provider.getBlockNumber()));
 
     accountTransactionHistory = await api.route(
       'getAccountTransactionHistory',
@@ -475,7 +491,7 @@ describe('State API :: Accounts :: ', () => {
       await john.getBestOrderId(bid, johnScalarMarket.address, outcome2)
     );
 
-    await (await db).sync(john.augur, mock.constants.chunkSize, 0);
+    blockNumber = await syncStrategy.start(blockNumber, (await provider.getBlockNumber()));
 
     accountTransactionHistory = await api.route(
       'getAccountTransactionHistory',
@@ -505,7 +521,7 @@ describe('State API :: Accounts :: ', () => {
     await john.buyCompleteSets(johnYesNoMarket, numberOfCompleteSets);
     await john.sellCompleteSets(johnYesNoMarket, numberOfCompleteSets);
 
-    await (await db).sync(john.augur, mock.constants.chunkSize, 0);
+    blockNumber = await syncStrategy.start(blockNumber, (await provider.getBlockNumber()));
 
     accountTransactionHistory = await api.route(
       'getAccountTransactionHistory',
@@ -561,7 +577,7 @@ describe('State API :: Accounts :: ', () => {
     ];
     await john.doInitialReport(johnYesNoMarket, noPayoutSet);
 
-    await (await db).sync(john.augur, mock.constants.chunkSize, 0);
+    blockNumber = await syncStrategy.start(blockNumber, (await provider.getBlockNumber()))
 
     accountTransactionHistory = await api.route(
       'getAccountTransactionHistory',
@@ -635,7 +651,7 @@ describe('State API :: Accounts :: ', () => {
       }
     }
 
-    await (await db).sync(john.augur, mock.constants.chunkSize, 0);
+    blockNumber = await syncStrategy.start(blockNumber, (await provider.getBlockNumber()));
 
     accountTransactionHistory = await api.route(
       'getAccountTransactionHistory',
@@ -705,7 +721,7 @@ describe('State API :: Accounts :: ', () => {
       stringTo32ByteHex(''),
     );
 
-    await (await db).sync(john.augur, mock.constants.chunkSize, 0);
+    blockNumber = await syncStrategy.start(blockNumber, (await provider.getBlockNumber()));
 
     accountTransactionHistory = await api.route(
       'getAccountTransactionHistory',
@@ -932,8 +948,17 @@ describe('State API :: Accounts :: ', () => {
     // Create market, do an initial report, and then dispute to multiple outcomes and multiple times
     const johnYesNoMarket = await john.createReasonableYesNoMarket();
 
+    const syncStrategy = new BulkSyncStrategy(
+      provider.getLogs,
+      (await db).logFilters.buildFilter,
+      (await db).logFilters.onLogsAdded,
+      john.augur.contractEvents.parseLogs
+    );
+    let blockNumber = await provider.getBlockNumber();
+    blockNumber = await syncStrategy.start(0, blockNumber);
+
     // Move time to open reporting
-    let newTime = (await johnYesNoMarket.getEndTime_()).plus(
+    const newTime = (await johnYesNoMarket.getEndTime_()).plus(
       SECONDS_IN_A_DAY.times(7)
     );
     await john.setTimestamp(newTime);
@@ -964,7 +989,7 @@ describe('State API :: Accounts :: ', () => {
     await john.contribute(johnYesNoMarket, noPayoutSet, new BigNumber(5));
     await john.contribute(johnYesNoMarket, noPayoutSet, new BigNumber(7));
 
-    await (await db).sync(john.augur, mock.constants.chunkSize, 0);
+    blockNumber = await syncStrategy.start(blockNumber, (await provider.getBlockNumber()));
 
     let userCurrentDisputeStake = await api.route(
       'getUserCurrentDisputeStake',
