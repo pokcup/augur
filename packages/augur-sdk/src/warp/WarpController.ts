@@ -21,7 +21,7 @@ export class WarpController {
     return new WarpController(db, ipfs);
   }
 
-  constructor(private db: SyncableInterface, private ipfs: IPFS) {
+  constructor(private db: DB, private ipfs: IPFS) {
   }
 
   async createAllCheckpoints() {

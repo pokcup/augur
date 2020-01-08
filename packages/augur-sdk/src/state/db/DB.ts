@@ -5,7 +5,6 @@ import {
   LogCallbackType,
   LogFilterAggregatorInterface,
 } from '../logs/LogFilterAggregator';
-import { SyncableInterface } from '../types';
 import { SyncableDB } from './SyncableDB';
 import { SyncStatus } from './SyncStatus';
 //import { LiquidityDB, LiquidityLastUpdated, MarketHourlyLiquidity } from './LiquidityDB';
@@ -62,7 +61,7 @@ export interface DerivedDBConfiguration {
   idFields?: string[];
 }
 
-export class DB  implements SyncableInterface {
+export class DB {
   private networkId: number;
   private blockstreamDelay: number;
   private syncableDatabases: { [dbName: string]: SyncableDB } = {};
