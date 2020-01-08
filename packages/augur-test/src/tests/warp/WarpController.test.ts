@@ -98,7 +98,7 @@ describe('WarpController', () => {
           - orders
           - pnl
   **/
-  describe('empty database', () => {
+  describe('structure', () => {
     describe('top-level directory', () => {
       test('should have a version file with the version number', async () => {
         await expect(ipfs.cat(`${fileHash}/VERSION`)).resolves.toEqual(Buffer.from('1'));
@@ -119,6 +119,10 @@ describe('WarpController', () => {
             type: 'dir',
           }),
           expect.objectContaining({
+            name: 'market',
+            type: 'dir',
+          }),
+          expect.objectContaining({
             name: 'index',
             type: 'file',
           }),
@@ -127,6 +131,19 @@ describe('WarpController', () => {
             type: 'dir',
           }),
         ]);
+      });
+
+      describe('market rollup', () => {
+        test('should create an item for all the markets', async () => {
+          const allMarkets = (await db.MarketCreated.toArray()).map((market) => {
+            return expect.objectContaining({
+              name: market.market,
+              type: 'dir',
+            })
+          });
+
+          await expect(ipfs.ls(`${fileHash}/market`)).resolves.toEqual(expect.arrayContaining(allMarkets));
+        });
       });
     });
   });
@@ -147,6 +164,14 @@ describe('WarpController', () => {
         });
 
       expect(splitLogs).toEqual(await db.MarketCreated.toArray());
+    });
+  });
+
+  describe('partial sync', () => {
+    test('should load order events per market', async () => {
+
+
+
     });
   });
 
@@ -180,7 +205,7 @@ describe('WarpController', () => {
   describe('warp sync checkpoint', () => {
     test('should ', async () => {
 
-      
+
     });
   });
 });
