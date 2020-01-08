@@ -222,9 +222,6 @@ export class DB  implements SyncableInterface {
       this.TransferBatch,
       this.ShareTokenBalanceChanged,
       this.Markets,
-      this.Dispute,
-      this.CurrentOrders,
-      this.ZeroXOrders,
     ]
   }
 
