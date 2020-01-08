@@ -9,12 +9,11 @@ export class WarpSyncStrategy {
   }
 
   async start(ipfsRootHash?: string): Promise<number | undefined> {
-    console.log('Hello', ipfsRootHash);
     // No hash, nothing to do!
     if (!ipfsRootHash) return undefined;
 
     const allLogs = await this.warpSyncController.getFile(
-      'QmThtLf1Qho9JpnnFig71VMUBgPQLbxSdjRs7Hbh7xVJLu/index');
+      `${ipfsRootHash}/index`);
     const splitLogs = allLogs.toString().
       split('\n').
       filter((log) => log).
@@ -29,8 +28,11 @@ export class WarpSyncStrategy {
     const groupedLogs = _.groupBy(splitLogs, 'blockNumber');
     for (const blockNumber in groupedLogs) {
       if (groupedLogs.hasOwnProperty(blockNumber)) {
-        console.log(Number(blockNumber), groupedLogs[blockNumber]);
-        await this.onLogsAdded(Number(blockNumber), groupedLogs[blockNumber]);
+        try {
+          await this.onLogsAdded(Number(blockNumber), groupedLogs[blockNumber])
+        } catch (e) {
+          console.log(JSON.stringify(Number(blockNumber), groupedLogs[blockNumber]))
+        };
       }
     }
 

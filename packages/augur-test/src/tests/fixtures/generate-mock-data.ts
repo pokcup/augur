@@ -1,7 +1,9 @@
+import { createSeed } from '@augurproject/tools/build';
+import { writeSeedFile } from '@augurproject/tools/build/libs/ganache';
 import { writeFileSync } from 'fs';
 import * as path from 'path';
 
-import { makeProvider } from '../../libs';
+import { makeProvider, makeProviderWithDB } from '../../libs';
 import {
   ContractAPI,
   loadSeedFile,
@@ -11,7 +13,7 @@ import {
 
 (async () => {
   const seed = await loadSeedFile(defaultSeedPath);
-  const provider = await makeProvider(seed, ACCOUNTS);
+  const [db, provider] = await makeProviderWithDB(seed, ACCOUNTS);
 
   const john = await ContractAPI.userWrapper(
     ACCOUNTS[0],
@@ -23,15 +25,6 @@ import {
   await john.createReasonableYesNoMarket();
   await john.createReasonableYesNoMarket();
 
-  const logs = await provider.getLogs({
-    fromBlock: '0x0',
-    toBlock: 'latest',
-  });
-
-  const data = JSON.stringify(logs, null, 2);
-
-  writeFileSync(
-    path.resolve('./src/tests/fixtures/scenario-1.json'),
-    data
-  );
+  const newSeed = await createSeed(provider, db, seed.addresses);
+  await writeSeedFile(newSeed, '/tmp/newSeed.json');
 })().catch(e => console.error(e));
