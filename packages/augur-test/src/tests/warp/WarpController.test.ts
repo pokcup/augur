@@ -111,16 +111,16 @@ describe('WarpController', () => {
             type: 'file',
           }),
           expect.objectContaining({
-            name: 'index',
-            type: 'file',
-          }),
-          expect.objectContaining({
             name: 'accounts',
             type: 'dir',
           }),
           expect.objectContaining({
             name: 'checkpoints',
             type: 'dir',
+          }),
+          expect.objectContaining({
+            name: 'index',
+            type: 'file',
           }),
           expect.objectContaining({
             name: 'tables',
