@@ -1,7 +1,6 @@
 import { ContractAddresses } from '@augurproject/artifacts';
 import { NetworkId } from '@augurproject/artifacts/build';
 import { DB } from '@augurproject/sdk/build/state/db/DB';
-import { LogFilterAggregator } from '@augurproject/sdk/build/state/logs/LogFilterAggregator';
 import { BulkSyncStrategy } from '@augurproject/sdk/build/state/sync/BulkSyncStrategy';
 import { WarpSyncStrategy } from '@augurproject/sdk/build/state/sync/WarpSyncStrategy';
 import { configureDexieForNode } from '@augurproject/sdk/build/state/utils/DexieIDBShim';
@@ -17,21 +16,22 @@ import { ContractDependenciesEthers } from 'contract-dependencies-ethers';
 import * as IPFS from 'ipfs';
 import { makeDbMock, makeProvider } from '../../libs';
 import { TestEthersProvider } from '../../libs/TestEthersProvider';
-import { API } from "@augurproject/sdk/build/state/getter/API";
+import { API } from '@augurproject/sdk/build/state/getter/API';
 
 const mock = makeDbMock();
 
 describe('WarpController', () => {
   let addresses: ContractAddresses;
-  let db:DB;
+  let db: DB;
   let dependencies: ContractDependenciesEthers;
   let ipfs;
   let john: ContractAPI;
   let mary: ContractAPI;
-  let networkId:NetworkId;
+  let networkId: NetworkId;
   let provider: TestEthersProvider;
   let warpController: WarpController;
   let fileHash: string;
+  let allMarketIds: string[];
 
   beforeAll(async () => {
     configureDexieForNode(true);
@@ -62,6 +62,10 @@ describe('WarpController', () => {
 
     warpController = new WarpController(db, ipfs);
     fileHash = await warpController.createAllCheckpoints();
+
+    allMarketIds = (await db.MarketCreated.toArray()).map(
+      market => market.market
+    );
   });
 
   afterAll(async () => {
@@ -101,7 +105,9 @@ describe('WarpController', () => {
   describe('structure', () => {
     describe('top-level directory', () => {
       test('should have a version file with the version number', async () => {
-        await expect(ipfs.cat(`${fileHash}/VERSION`)).resolves.toEqual(Buffer.from('1'));
+        await expect(ipfs.cat(`${fileHash}/VERSION`)).resolves.toEqual(
+          Buffer.from('1')
+        );
       });
 
       test('should have the prescribed layout', async () => {
@@ -135,14 +141,37 @@ describe('WarpController', () => {
 
       describe('market rollup', () => {
         test('should create an item for all the markets', async () => {
-          const allMarkets = (await db.MarketCreated.toArray()).map((market) => {
+          const allMarkets = allMarketIds.map(market => {
             return expect.objectContaining({
-              name: market.market,
+              name: market,
               type: 'dir',
-            })
+            });
           });
 
-          await expect(ipfs.ls(`${fileHash}/market`)).resolves.toEqual(expect.arrayContaining(allMarkets));
+          await expect(ipfs.ls(`${fileHash}/market`)).resolves.toEqual(
+            expect.arrayContaining(allMarkets)
+          );
+        });
+
+        test('should create an index file with all the logs for a market', async () => {
+          const marketId = allMarketIds[0];
+          const item = await ipfs.cat(`${fileHash}/market/${marketId}`);
+
+          console.log('hash', `${fileHash}/market/${marketId}`);
+          console.log(item.toString());
+        });
+
+        test('should have a bunch of stuff for a given market', async () => {
+          const marketId = allMarketIds[0];
+          await expect(
+            ipfs.ls(`${fileHash}/market/${marketId}`)
+          ).resolves.toEqual(
+            expect.arrayContaining([
+              {
+                type: 'file',
+              },
+            ])
+          );
         });
       });
     });
@@ -151,11 +180,14 @@ describe('WarpController', () => {
   describe('non-empty dbs', () => {
     // This is a spot check.
     test('should have some logs', async () => {
-      const marketCreated = await ipfs.cat(`${fileHash}/tables/MarketCreated/index`);
-      const splitLogs = marketCreated.toString().
-        split('\n').
-        filter((log) => log).
-        map((log) => {
+      const marketCreated = await ipfs.cat(
+        `${fileHash}/tables/MarketCreated/index`
+      );
+      const splitLogs = marketCreated
+        .toString()
+        .split('\n')
+        .filter(log => log)
+        .map(log => {
           try {
             return JSON.parse(log);
           } catch (e) {
@@ -168,34 +200,30 @@ describe('WarpController', () => {
   });
 
   describe('partial sync', () => {
-    test('should load order events per market', async () => {
-
-
-
-    });
+    test('should load order events per market', async () => {});
   });
 
   describe('full sync', () => {
     test('should populate market data', async () => {
       const maryDB = await mock.makeDB(mary.augur, ACCOUNTS);
       const maryWarpController = new WarpController(maryDB, ipfs);
-      const maryApi  = new API(mary.augur, Promise.resolve(maryDB));
+      const maryApi = new API(mary.augur, Promise.resolve(maryDB));
 
       const warpSyncStrategy = new WarpSyncStrategy(
         maryWarpController,
-        maryDB.logFilters.onLogsAdded,
+        maryDB.logFilters.onLogsAdded
       );
 
       // populate db.
       await warpSyncStrategy.start(fileHash);
 
-      const johnApi  = new API(john.augur, Promise.resolve(db));
+      const johnApi = new API(john.augur, Promise.resolve(db));
       const johnMarketList = await johnApi.route('getMarkets', {
-        universe: addresses.Universe
+        universe: addresses.Universe,
       });
 
       const maryMarketList = await maryApi.route('getMarkets', {
-        universe: addresses.Universe
+        universe: addresses.Universe,
       });
 
       expect(maryMarketList).toEqual(johnMarketList);
@@ -203,9 +231,6 @@ describe('WarpController', () => {
   });
 
   describe('warp sync checkpoint', () => {
-    test('should ', async () => {
-
-
-    });
+    test('should ', async () => {});
   });
 });
