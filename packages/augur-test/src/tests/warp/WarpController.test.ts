@@ -54,7 +54,8 @@ describe('WarpController', () => {
       provider.getLogs,
       db.logFilters.buildFilter,
       db.logFilters.onLogsAdded,
-      john.augur.contractEvents.parseLogs
+      john.augur.contractEvents.parseLogs,
+      1
     );
 
     // populate db.
@@ -161,6 +162,8 @@ describe('WarpController', () => {
           console.log(item.toString());
         });
 
+        test('should reconstitute what is needed for the market', async () => {});
+
         test('should have a bunch of stuff for a given market', async () => {
           const marketId = allMarketIds[0];
           await expect(
@@ -199,34 +202,58 @@ describe('WarpController', () => {
     });
   });
 
-  describe('partial sync', () => {
-    test('should load order events per market', async () => {});
-  });
+  describe('syncing', () => {
+    let johnApi: API;
+    let maryApi: API;
+    let warpSyncStrategy: WarpSyncStrategy;
 
-  describe('full sync', () => {
-    test('should populate market data', async () => {
+    beforeEach(async () => {
+      johnApi = new API(john.augur, Promise.resolve(db));
+
       const maryDB = await mock.makeDB(mary.augur, ACCOUNTS);
       const maryWarpController = new WarpController(maryDB, ipfs);
-      const maryApi = new API(mary.augur, Promise.resolve(maryDB));
+      maryApi = new API(mary.augur, Promise.resolve(maryDB));
 
-      const warpSyncStrategy = new WarpSyncStrategy(
+      warpSyncStrategy = new WarpSyncStrategy(
         maryWarpController,
         maryDB.logFilters.onLogsAdded
       );
+    });
 
-      // populate db.
-      await warpSyncStrategy.start(fileHash);
+    describe('partial sync', () => {
+      test('should load specific market data', async () => {
+        console.log('filehash', fileHash);
 
-      const johnApi = new API(john.augur, Promise.resolve(db));
-      const johnMarketList = await johnApi.route('getMarkets', {
-        universe: addresses.Universe,
+        const marketId = allMarketIds[3];
+        await warpSyncStrategy.syncMarket(marketId);
+
+        const johnMarketList = await johnApi.route('getMarketsInfo', {
+          marketIds: [marketId],
+        });
+
+        const maryMarketList = await maryApi.route('getMarketsInfo', {
+          marketIds: [marketId]
+        });
+
+        expect(maryMarketList).toEqual(johnMarketList);
       });
+    });
 
-      const maryMarketList = await maryApi.route('getMarkets', {
-        universe: addresses.Universe,
+    describe('full sync', () => {
+      test('should populate market data', async () => {
+        // populate db.
+        await warpSyncStrategy.start(fileHash);
+
+        const johnMarketList = await johnApi.route('getMarkets', {
+          universe: addresses.Universe,
+        });
+
+        const maryMarketList = await maryApi.route('getMarkets', {
+          universe: addresses.Universe,
+        });
+
+        expect(maryMarketList).toEqual(johnMarketList);
       });
-
-      expect(maryMarketList).toEqual(johnMarketList);
     });
   });
 

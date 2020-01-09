@@ -95,7 +95,7 @@ export class WarpController {
       WarpController.DEFAULT_NODE_TYPE
     );
 
-    console.log(d.toString());
+    console.log('checkpoint', d.toString());
     return d.toString();
   }
 
@@ -214,8 +214,6 @@ export class WarpController {
         const items = _.flatten(await Promise.all(
           dbNamesToSync.map(dbName => this.createLogFile(dbName, market))
         ));
-
-        console.log(market, items.length, items);
 
         const file = Unixfs.default('file');
         for (let i = 0; i < items.length; i++) {
