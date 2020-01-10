@@ -46,7 +46,11 @@ describe('WarpController', () => {
     addresses = seed.addresses;
 
     john = await ContractAPI.userWrapper(ACCOUNTS[0], provider, seed.addresses);
-    newJohn = await ContractAPI.userWrapper(ACCOUNTS[0], provider, seed.addresses);
+    newJohn = await ContractAPI.userWrapper(
+      ACCOUNTS[0],
+      provider,
+      seed.addresses
+    );
 
     db = await mock.makeDB(john.augur, ACCOUNTS);
 
@@ -206,11 +210,12 @@ describe('WarpController', () => {
     let johnApi: API;
     let newJohnApi: API;
     let warpSyncStrategy: WarpSyncStrategy;
+    let newJohnDB: DB;
 
     beforeEach(async () => {
       johnApi = new API(john.augur, Promise.resolve(db));
 
-      const newJohnDB = await mock.makeDB(newJohn.augur, ACCOUNTS);
+      newJohnDB = await mock.makeDB(newJohn.augur, ACCOUNTS);
       const newJohnWarpController = new WarpController(newJohnDB, ipfs);
       newJohnApi = new API(newJohn.augur, Promise.resolve(newJohnDB));
 
@@ -230,30 +235,34 @@ describe('WarpController', () => {
         });
 
         const newJohnMarketList = await newJohnApi.route('getMarketsInfo', {
-          marketIds: [marketId]
+          marketIds: [marketId],
         });
 
         expect(newJohnMarketList).toEqual(johnMarketList);
       });
       test('should load specific user data', async () => {
-        const marketId = allMarketIds[3];
-        await warpSyncStrategy.syncMarket(marketId);
-
-        const johnMarketList = await johnApi.route('getMarketsInfo', {
-          marketIds: [marketId],
+        const johnUserAccountData = await johnApi.route('getUserAccountData', {
+          universe: addresses.Universe,
+          account: john.account.publicKey,
         });
 
-        const newJohnMarketList = await newJohnApi.route('getMarketsInfo', {
-          marketIds: [marketId]
-        });
+        console.log('MarketCreated', await newJohnDB.MarketCreated.toArray());
 
-        expect(newJohnMarketList).toEqual(johnMarketList);
+        const newJohnUserAccountData = await newJohnApi.route(
+          'getUserAccountData',
+          {
+            universe: addresses.Universe,
+            account: newJohn.account.publicKey,
+          }
+        );
 
+        expect(newJohnUserAccountData).toEqual(johnUserAccountData);
       });
     });
 
     describe('full sync', () => {
       test('should populate market data', async () => {
+        console.log('fileHash', fileHash);
         // populate db.
         await warpSyncStrategy.start(fileHash);
 
@@ -264,6 +273,9 @@ describe('WarpController', () => {
         const maryMarketList = await newJohnApi.route('getMarkets', {
           universe: addresses.Universe,
         });
+
+        console.log('MarketCreated', await newJohnDB.MarketCreated.toArray());
+        console.log('MarketsDB', await newJohnDB.Markets.toArray());
 
         expect(maryMarketList).toEqual(johnMarketList);
       });

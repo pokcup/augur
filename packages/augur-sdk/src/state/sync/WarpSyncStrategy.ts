@@ -47,11 +47,7 @@ export class WarpSyncStrategy {
     const groupedLogs = _.groupBy(splitLogs, 'blockNumber');
     for (const blockNumber in groupedLogs) {
       if (groupedLogs.hasOwnProperty(blockNumber)) {
-        try {
-          await this.onLogsAdded(Number(blockNumber), groupedLogs[blockNumber])
-        } catch (e) {
-          console.log(JSON.stringify(Number(blockNumber), groupedLogs[blockNumber]))
-        };
+        await this.onLogsAdded(Number(blockNumber), _.sortBy(groupedLogs[blockNumber], 'logIndex'));
       }
     }
 
